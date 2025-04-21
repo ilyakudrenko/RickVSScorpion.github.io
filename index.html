@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Fighting Game</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { 
+      margin: 0; 
+      background-image: url("img/backP.webp"); 
+      color: white; 
+      background-size: cover; 
+      background-repeat: no-repeat; 
+      font-family: 'Get Schwifty', sans-serif;
+    }
+
+    @font-face {
+      font-family: 'Get Schwifty';
+      src: url('https://s3-us-west-2.amazonaws.com/s.cdpn.io/3089507/get-schwifty.woff') format('woff');
+    }
+
+    #gameOverText {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Get Schwifty', sans-serif;
+      font-size: 4em;
+      text-align: center;
+      color: #08BAE3;
+      -webkit-text-stroke: 2px black;
+      z-index: 1000;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.1); }
+    }
+
+
+    #gameCanvas {
+      position: relative;
+      width: 800px;
+      height: 400px;
+      margin: 20px auto;
+      border: 2px solid white;
+      background-image: url("img/back1.webp");
+      background-size: cover;
+      background-repeat: no-repeat;
+      overflow: hidden;
+    }
+
+    #darkOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5); /* Adjust opacity here */
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .player {
+      position: absolute;
+      width: 80px;
+      height: 120px;
+      bottom: 0;
+      background-size: cover;
+      background-repeat: no-repeat;
+      transition: left 0.1s linear, bottom 0.1s linear;
+    }
+    .enemy {
+      position: absolute;
+      width: 50px;
+      height: 100px;
+      bottom: 0;
+      background-size: cover;
+      background-repeat: no-repeat;
+      transition: left 0.1s linear, bottom 0.1s linear;
+    }
+    .player {
+      background-image: url("img/ri.png");
+    }
+    .enemy {
+      background-image: url("img/si.png");
+    }
+    .health-container {
+      width: 400px;
+      height: 20px;
+      margin: 10px;
+      background-color: #555;
+      border-radius: 50px;
+    }
+    .health-bar {
+      height: 100%;
+      background: #1F54E5;
+      border-radius: 50px;
+    }
+    #ui {
+      display: flex;
+      justify-content: space-between;
+      width: 800px;
+      margin: 0 auto;
+    }
+    #controls {
+      text-align: center;
+      margin: 10px auto;
+    }
+    button {
+      margin: 0 10px;
+      padding: 5px 15px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .fireball {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: radial-gradient(circle, lightgreen 0%, green 100%);
+      border-radius: 50%;
+      bottom: 50px;
+    }
+    .enemy-fireball {
+      background: radial-gradient(circle, orange 0%, red 100%);
+    }
+
+    .btn {
+      box-shadow: 3px 4px 0px 0px #3dc21b;
+      background:linear-gradient(to bottom, #37a855 5%, #5cbf2a 100%);
+      background-color:#37a855;
+      border-radius:18px;
+      border:1px solid #18ab29;
+      display:inline-block;
+      cursor:pointer;
+      font-family: 'Get Schwifty', sans-serif;
+      color:white;
+      font-size:28px;
+      font-weight:bold;
+      padding:7px 25px;
+      text-decoration:none;
+      text-shadow:0px 1px 0px #2f6627;
+    }
+    .btn:hover {
+      background:linear-gradient(to bottom, #5cbf2a 5%, #37a855 100%);
+      background-color:#5cbf2a;
+    }
+    .btn:active {
+      position:relative;
+      top:1px;
+    }
+
+
+    #cutscene {
+      display: none;
+      position: relative;
+      top: 0;
+      left: 0;
+      width: 800px;
+      height: 400px;
+      background: black;
+      z-index: 999;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #cutsceneVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <!-- <div id="darkOverlay"></div> -->
+  <div id="gameOverText"></div>
+  <div id="ui">
+    <div class="health-container">
+      <div id="playerHealth" class="health-bar"></div>
+    </div>
+    <div class="health-container">
+      <div id="enemyHealth" class="health-bar" style="background: #E62800;"></div>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="pauseBtn" class="btn">Pause</button>
+    <button id="restartBtn" class="btn">Restart</button>
+  </div>
+
+  <div id="gameCanvas">
+    <div id="cutscene">
+      <video id="cutsceneVideo" autoplay muted>
+        <source src="img/fatality.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+      </video>
+    </div>
+    <div id="player" class="player"></div>
+    <div id="enemy" class="enemy"></div>
+  </div>
+  <script>
+    const player = document.getElementById("player");
+    const enemy = document.getElementById("enemy");
+    const playerHealthBar = document.getElementById("playerHealth");
+    const enemyHealthBar = document.getElementById("enemyHealth");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const cutscene = document.getElementById("cutscene");
+    const cutsceneVideo = document.getElementById("cutsceneVideo");
+    let playerX = 50, enemyX = 700;
+    let playerY = 0, enemyY = 0;
+    let isJumping = false, enemyJumping = false;
+    let playerHealth = 100, enemyHealth = 100;
+    let isPaused = false;
+    let aiInterval;
+    let keysPressed = new Set();
+    let fatalityActive = false;
+    let fatalityTimer;
+    let fatalityTriggered = false;
+
+    function render() {
+      player.style.left = playerX + "px";
+      player.style.bottom = playerY + "px";
+      enemy.style.left = enemyX + "px";
+      enemy.style.bottom = enemyY + "px";
+      playerHealthBar.style.width = playerHealth + "%";
+      enemyHealthBar.style.width = enemyHealth + "%";
+    }
+
+    function checkCollision() {
+      return Math.abs(playerX - enemyX) < 60 && playerY < 20 && enemyY < 20;
+    }
+
+    function shootFireball() {
+      const fb = document.createElement("div");
+      fb.classList.add("fireball");
+      fb.style.left = playerX + 50 + "px";
+      gameCanvas.appendChild(fb);
+      let x = playerX + 50;
+      const interval = setInterval(() => {
+        if (isPaused) return;
+        x += 10;
+        fb.style.left = x + "px";
+        if (Math.abs(x - enemyX) < 50) {
+          enemyHealth -= 20;
+          fb.remove();
+          clearInterval(interval);
+          render();
+          checkGameOver();
+        }
+        if (x > 800) fb.remove();
+      }, 50);
+    }
+
+    function shootEnemyFireball() {
+      const fb = document.createElement("div");
+      fb.classList.add("fireball", "enemy-fireball");
+      fb.style.left = enemyX + "px";
+      gameCanvas.appendChild(fb);
+      let x = enemyX;
+      const interval = setInterval(() => {
+        if (isPaused) return;
+        x -= 10;
+        fb.style.left = x + "px";
+        if (Math.abs(x - playerX) < 50) {
+          playerHealth -= 10;
+          fb.remove();
+          clearInterval(interval);
+          render();
+          checkGameOver();
+        }
+        if (x < 0) fb.remove();
+      }, 50);
+    }
+
+    function throwFatalityFireball() {
+      cutscene.style.display = "flex";
+      cutsceneVideo.currentTime = 0;
+      cutsceneVideo.play();
+      setTimeout(() => endGame("Rick WINS - FATALITY!"), 20000);
+      // const fb = document.createElement("div");
+      // fb.classList.add("fireball");
+      // fb.style.left = playerX + 50 + "px";
+      // gameCanvas.appendChild(fb);
+      // let x = playerX + 50;
+      // const interval = setInterval(() => {
+      //   if (isPaused) return;
+      //   x += 10;
+      //   fb.style.left = x + "px";
+      //   if (Math.abs(x - enemyX) < 50) {
+      //     enemy.style.backgroundImage = 'url("img/ssh.png")';
+      //     fb.remove();
+      //     clearInterval(interval);
+      //     setTimeout(() => endGame("PLAYER WINS - FATALITY!"), 1000);
+      //   }
+      //   if (x > 800) fb.remove();
+      // }, 50);
+    }
+
+    function jump(entity, isJumpingCheck, setY, renderCallback) {
+      if (isJumpingCheck()) return;
+      let h = 0;
+      setY(15);
+      const up = setInterval(() => {
+        if (isPaused) return;
+        h += 15;
+        setY(h);
+        renderCallback();
+        if (h >= 120) {
+          clearInterval(up);
+          const down = setInterval(() => {
+            if (isPaused) return;
+            h -= 15;
+            setY(h);
+            renderCallback();
+            if (h <= 0) {
+              clearInterval(down);
+              setY(0);
+              renderCallback();
+            }
+          }, 50);
+        }
+      }, 50);
+    }
+
+    document.addEventListener("keydown", (e) => {
+      keysPressed.add(e.key);
+      if (isPaused && !fatalityActive) return;
+
+      if (fatalityActive && keysPressed.has("f") && keysPressed.has("h") && (keysPressed.has(" ") || keysPressed.has("Space") || keysPressed.has("Spacebar"))) {
+        fatalityTriggered = true;
+        clearTimeout(fatalityTimer);
+        throwFatalityFireball();
+        keysPressed.clear();
+        return;
+      }
+      if (keysPressed.has("f") && keysPressed.has("h")) {
+        player.style.backgroundImage = 'url("img/rsh.png")';
+        setTimeout(() => player.style.backgroundImage = 'url("img/ri.png")', 400);
+        shootFireball();
+        keysPressed.clear();
+        return;
+      }
+      if (!isJumping) {
+        switch (e.key) {
+          case "a": {
+            playerX -= 10;
+            player.style.backgroundImage = 'url("img/rg.png")';
+            setTimeout(() => player.style.backgroundImage = 'url("img/ri.png")', 300);
+            break;
+          }
+          case "d": {
+            playerX += 10;
+            player.style.backgroundImage = 'url("img/rg.png")';
+            setTimeout(() => player.style.backgroundImage = 'url("img/ri.png")', 300);
+            break;
+          }
+          case "f": {
+            player.style.backgroundImage = 'url("img/rf.png")';
+            setTimeout(() => player.style.backgroundImage = 'url("img/ri.png")', 300);
+            if (checkCollision()) enemyHealth -= 10;
+            break;
+          }
+        }
+      }
+      if ([" ", "Spacebar", "Space"].includes(e.key)) {
+        jump(player, () => isJumping, y => { playerY = y; isJumping = y > 0; }, render);
+      }
+      playerX = Math.max(0, Math.min(750, playerX));
+      render();
+      checkGameOver();
+    });
+
+    document.addEventListener("keyup", (e) => keysPressed.delete(e.key));
+
+    function checkGameOver() {
+
+      if (enemyHealth <= 0 && !fatalityActive) {
+        // Stop enemy
+        clearInterval(aiInterval);
+        fatalityActive = true;
+        const gameOverDiv = document.getElementById("gameOverText");
+        gameOverDiv.innerText = "FINISH HIM";
+        gameOverDiv.style.display = "block";
+        setTimeout(() => {
+          document.getElementById("gameOverText").style.display = "none";
+        }, 3000);
+
+        // Start 30-second fatality timer
+        fatalityTimer = setTimeout(() => {
+        if (!fatalityTriggered) {
+          document.getElementById("gameOverText").style.display = "none";
+          endGame("Rick WINS");
+        }
+      }, 10000);
+
+      return;
+      }
+      if (playerHealth <= 0) {
+        endGame("Scorpion WINS");
+      }
+
+      // if (playerHealth <= 0 || enemyHealth <= 0) {
+      //   const winnerText = playerHealth <= 0 ? "ENEMY WINS" : "PLAYER WINS";
+      //   const gameOverDiv = document.getElementById("gameOverText");
+      //   gameOverDiv.innerText = "GAME OVER\n" + winnerText;
+      //   gameOverDiv.style.display = "block";
+      //   clearInterval(aiInterval);
+      //   isPaused = true;
+      //   //resetGame();
+      // }
+    }
+
+    function endGame(winner) {
+      const gameOverDiv = document.getElementById("gameOverText");
+      gameOverDiv.innerText = "GAME OVER\n" + winner;
+      gameOverDiv.style.display = "block";
+      clearInterval(aiInterval);
+      isPaused = true;
+    }
+
+    function enemyAI() {
+      if (isPaused) return;
+      const dist = enemyX - playerX;
+      if (Math.abs(dist) < 80 && Math.random() < 0.3) {
+        jump(enemy, () => enemyJumping, y => { enemyY = y; enemyJumping = y > 0; }, render);
+      }
+      if (Math.abs(dist) < 60 && Math.random() < 0.5) {
+        enemy.style.backgroundImage = 'url("img/sf.png")';
+        setTimeout(() => enemy.style.backgroundImage = 'url("img/si.png")', 300);
+        playerHealth -= 5;
+      } else if (Math.random() < 0.1) {
+        enemy.style.backgroundImage = 'url("img/ssh.png")';
+        setTimeout(() => enemy.style.backgroundImage = 'url("img/si.png")', 300);
+        shootEnemyFireball();
+      } else if (dist > 0) {
+        enemyX -= Math.random() < 0.3 && dist < 150 ? 2 : 7;
+        enemy.style.backgroundImage = 'url("img/sg.png")';
+        setTimeout(() => enemy.style.backgroundImage = 'url("img/si.png")', 200);
+      } else {
+        enemyX += 7;
+        enemy.style.backgroundImage = 'url("img/sg.png")';
+        setTimeout(() => enemy.style.backgroundImage = 'url("img/si.png")', 200);
+      }
+      enemyX = Math.max(0, Math.min(750, enemyX));
+      render();
+      checkGameOver();
+    }
+
+    function startAI() {
+      clearInterval(aiInterval);
+      aiInterval = setInterval(enemyAI, 400);
+    }
+
+    function resetGame() {
+      document.getElementById("gameOverText").style.display = "none";
+      cutscene.style.display = "none";
+      playerX = 50; enemyX = 700;
+      playerY = 0; enemyY = 0;
+      isJumping = false; enemyJumping = false;
+      playerHealth = 100; enemyHealth = 100;
+      isPaused = false;
+      pauseBtn.textContent = "Pause";
+      render();
+      startAI();
+
+      fatalityActive = false;
+      fatalityTriggered = false;
+      clearTimeout(fatalityTimer);
+    }
+
+    pauseBtn.addEventListener("click", () => {
+      isPaused = !isPaused;
+      pauseBtn.textContent = isPaused ? "Resume" : "Pause";
+    });
+    restartBtn.addEventListener("click", resetGame);
+
+    startAI();
+    render();
+  </script>
+</body>
+</html>
